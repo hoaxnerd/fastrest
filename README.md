@@ -1,3 +1,14 @@
+<p align="center">
+  <img src=".github/banner.png" alt="FastREST" width="600">
+</p>
+
+<p align="center">
+  <a href="https://github.com/hoaxnerd/fastrest/actions/workflows/ci.yml"><img src="https://github.com/hoaxnerd/fastrest/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://pypi.org/project/fastrest/"><img src="https://img.shields.io/pypi/v/fastrest" alt="PyPI"></a>
+  <a href="https://pypi.org/project/fastrest/"><img src="https://img.shields.io/pypi/pyversions/fastrest" alt="Python"></a>
+  <a href="https://github.com/hoaxnerd/fastrest/blob/main/LICENSE"><img src="https://img.shields.io/github/license/hoaxnerd/fastrest" alt="License"></a>
+</p>
+
 # FastREST
 
 **DRF inspired REST Framework for FastAPI.**
