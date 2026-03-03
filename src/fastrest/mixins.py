@@ -22,6 +22,13 @@ class CreateModelMixin:
 class ListModelMixin:
     async def list(self, request: Any, **kwargs: Any) -> Response:
         queryset = await self.get_queryset()
+        queryset = self.filter_queryset(queryset)
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return Response(data=self.get_paginated_response(serializer.data))
+
         serializer = self.get_serializer(queryset, many=True)
         return Response(data=serializer.data)
 

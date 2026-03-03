@@ -22,8 +22,11 @@ class GenericAPIView(APIView):
     lookup_field: str = "pk"
     lookup_url_kwarg: str | None = None
     dependencies: list = []
+    pagination_class = None
+    filter_backends = None
 
     _session = None
+    _paginator = None
     _adapter = None
 
     @property
@@ -77,10 +80,25 @@ class GenericAPIView(APIView):
         }
 
     def filter_queryset(self, queryset: list) -> list:
+        from fastrest.settings import api_settings
+        backends = self.filter_backends
+        if backends is None:
+            backends = api_settings.DEFAULT_FILTER_BACKENDS or []
+        for backend_cls in backends:
+            backend = backend_cls() if isinstance(backend_cls, type) else backend_cls
+            queryset = backend.filter_queryset(self.request, queryset, self)
         return queryset
 
     def paginate_queryset(self, queryset: list) -> list | None:
-        return None
+        from fastrest.settings import api_settings
+        cls = self.pagination_class or api_settings.DEFAULT_PAGINATION_CLASS
+        if cls is None:
+            return None
+        self._paginator = cls()
+        return self._paginator.paginate_queryset(queryset, self.request, view=self)
+
+    def get_paginated_response(self, data: list) -> dict:
+        return self._paginator.get_paginated_response(data)
 
 
 # Concrete generic views

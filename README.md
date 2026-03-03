@@ -8,7 +8,7 @@ FastREST lets you build async REST APIs using the patterns you already know from
 pip install fastrest
 ```
 
-> **Status:** Alpha (0.1.0). The core API is stable for serializers, viewsets, and routers. Pagination, filtering, and authentication backends are coming in future releases.
+> **Status:** Alpha (0.1.1). The core API is stable for serializers, viewsets, routers, pagination, and filtering. Authentication backends are coming in future releases.
 
 ---
 
@@ -169,6 +169,58 @@ class BookViewSet(ModelViewSet):
         return Response(data=serializer.data)
 ```
 
+### Pagination
+
+Add pagination to any viewset:
+
+```python
+from fastrest.pagination import PageNumberPagination
+
+class BookPagination(PageNumberPagination):
+    page_size = 20
+    max_page_size = 100
+
+class BookViewSet(ModelViewSet):
+    queryset = Book
+    serializer_class = BookSerializer
+    pagination_class = BookPagination
+```
+
+Paginated list responses return an envelope:
+
+```json
+{
+  "count": 42,
+  "next": "?page=2&page_size=20",
+  "previous": null,
+  "results": [...]
+}
+```
+
+Also available: `LimitOffsetPagination` with `?limit=20&offset=0`.
+
+### Filtering & Search
+
+Add search and ordering with filter backends:
+
+```python
+from fastrest.filters import SearchFilter, OrderingFilter
+
+class BookViewSet(ModelViewSet):
+    queryset = Book
+    serializer_class = BookSerializer
+    pagination_class = BookPagination
+    filter_backends = [SearchFilter, OrderingFilter]
+    search_fields = ["title", "description", "isbn"]
+    ordering_fields = ["title", "price"]
+    ordering = ["title"]  # default ordering
+```
+
+- `GET /api/books?search=django` — case-insensitive search across `search_fields`
+- `GET /api/books?ordering=-price` — sort by price descending
+- `GET /api/books?ordering=title,price` — multi-field sort
+- All query parameters appear automatically in OpenAPI `/docs`
+
 ### Permissions
 
 Composable permission classes with `&`, `|`, `~` operators:
@@ -288,7 +340,7 @@ Available: `CreateAPIView`, `ListAPIView`, `RetrieveAPIView`, `DestroyAPIView`, 
 
 ## Full Example
 
-See the [fastrest-example](https://github.com/anthropics/fastrest-example) repo for a complete bookstore API with authors, books, tags, and reviews.
+See the [fastrest-example](https://github.com/hoaxnerd/fastrest-example) repo for a complete bookstore API with authors, books, tags, and reviews.
 
 ---
 
@@ -307,8 +359,8 @@ FastREST implements the core DRF public API. If you've used DRF, you already kno
 | `ValidationError` | `ValidationError` | Done |
 | Field library | Field library | Done |
 | `APIClient` (test) | `APIClient` (test) | Done |
-| Pagination | — | Planned |
-| Filtering/Search | — | Planned |
+| Pagination | `PageNumberPagination`, `LimitOffsetPagination` | Done |
+| Filtering/Search | `SearchFilter`, `OrderingFilter` | Done |
 | Authentication backends | — | Planned |
 | Throttling | — | Planned |
 | Content negotiation | — | Planned |

@@ -131,8 +131,46 @@ class ViewSetMixin:
 
     @classmethod
     def _make_list_endpoint(cls, actions: dict):
-        async def endpoint(request: FastAPIRequest) -> Any:
-            return await cls._dispatch_view(actions, {}, request)
+        from fastapi import Query as FastAPIQuery
+        from fastrest.pagination import PageNumberPagination, LimitOffsetPagination
+        from fastrest.filters import SearchFilter, OrderingFilter
+
+        # Build query params based on configured pagination/filter backends
+        pagination_cls = getattr(cls, 'pagination_class', None)
+        filter_backends = getattr(cls, 'filter_backends', None) or []
+
+        query_params = {}
+        if pagination_cls:
+            if issubclass(pagination_cls, PageNumberPagination):
+                query_params['page'] = (int | None, FastAPIQuery(None, description="Page number"))
+                query_params['page_size'] = (int | None, FastAPIQuery(None, description="Number of results per page"))
+            elif issubclass(pagination_cls, LimitOffsetPagination):
+                query_params['limit'] = (int | None, FastAPIQuery(None, description="Number of results to return"))
+                query_params['offset'] = (int | None, FastAPIQuery(None, description="Starting position"))
+
+        for backend_cls in filter_backends:
+            if issubclass(backend_cls, SearchFilter):
+                query_params['search'] = (str | None, FastAPIQuery(None, description="Search term"))
+            elif issubclass(backend_cls, OrderingFilter):
+                query_params['ordering'] = (str | None, FastAPIQuery(None, description="Ordering fields (comma-separated, prefix with - for desc)"))
+
+        # Build endpoint with query params in signature for OpenAPI
+        if query_params:
+            async def endpoint(request: FastAPIRequest, **kwargs) -> Any:
+                return await cls._dispatch_view(actions, {}, request)
+            # Set annotations so FastAPI picks up the query params
+            annotations = {'request': FastAPIRequest, 'return': Any}
+            annotations.update({k: v[0] for k, v in query_params.items()})
+            endpoint.__annotations__ = annotations
+            # Set defaults
+            import inspect
+            params = [inspect.Parameter('request', inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=FastAPIRequest)]
+            for name, (type_, default) in query_params.items():
+                params.append(inspect.Parameter(name, inspect.Parameter.POSITIONAL_OR_KEYWORD, default=default, annotation=type_))
+            endpoint.__signature__ = inspect.Signature(params, return_annotation=Any)
+        else:
+            async def endpoint(request: FastAPIRequest) -> Any:
+                return await cls._dispatch_view(actions, {}, request)
         return endpoint
 
     @classmethod

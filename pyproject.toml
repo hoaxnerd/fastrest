@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fastrest"
-version = "0.1.0"
+version = "0.1.1"
 description = "DRF inspired REST Framework for FastAPI"
 readme = "README.md"
 license = "BSD-3-Clause"
@@ -44,11 +44,11 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/anthropics/fastrest"
-Documentation = "https://github.com/anthropics/fastrest"
-Repository = "https://github.com/anthropics/fastrest"
-Issues = "https://github.com/anthropics/fastrest/issues"
-Changelog = "https://github.com/anthropics/fastrest/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/hoaxnerd/fastrest"
+Documentation = "https://github.com/hoaxnerd/fastrest"
+Repository = "https://github.com/hoaxnerd/fastrest"
+Issues = "https://github.com/hoaxnerd/fastrest/issues"
+Changelog = "https://github.com/hoaxnerd/fastrest/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/fastrest"]
