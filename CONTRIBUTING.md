@@ -34,7 +34,7 @@ pytest tests/ -v
 
 ## Reporting Issues
 
-Use [GitHub Issues](https://github.com/anthropics/fastrest/issues) to report bugs or request features. Include:
+Use [GitHub Issues](https://github.com/hoaxnerd/fastrest/issues) to report bugs or request features. Include:
 - Python version
 - fastrest version
 - Minimal reproduction code
