@@ -256,8 +256,8 @@ class ModelSerializer(Serializer):
     @property
     def adapter(self):
         if self._adapter is None:
-            from fastrest.compat.orm.sqlalchemy import adapter
-            self._adapter = adapter
+            from fastrest.compat.orm import get_default_adapter
+            self._adapter = get_default_adapter()
         return self._adapter
 
     def get_fields(self) -> OrderedDict[str, Field]:

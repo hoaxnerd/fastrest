@@ -17,9 +17,12 @@ FastREST lets you build async REST APIs using the patterns you already know from
 
 ```
 pip install fastrest
+pip install fastrest[sqlalchemy]
+pip install fastrest[mcp]
+pip install fastrest[sqlalchemy,mcp]
 ```
 
-> **Status:** Alpha (0.1.1). The core API is stable for serializers, viewsets, routers, pagination, and filtering. Authentication backends are coming in future releases.
+> **Status:** Beta (0.1.2). The core API is stable for serializers, viewsets, routers, pagination, filtering, authentication, throttling, content negotiation, and agent integration (Skills & MCP).
 
 ---
 
@@ -251,6 +254,148 @@ class ArticleViewSet(ModelViewSet):
 
 Built-in: `AllowAny`, `IsAuthenticated`, `IsAdminUser`, `IsAuthenticatedOrReadOnly`.
 
+### Authentication
+
+Pluggable authentication backends, just like DRF:
+
+```python
+from fastrest.authentication import TokenAuthentication
+
+# Provide a lookup function that returns a user or None
+def get_user_by_token(token_key):
+    return User.objects.get(token=token_key)  # your lookup logic
+
+token_auth = TokenAuthentication(get_user_by_token=get_user_by_token)
+
+class ArticleViewSet(ModelViewSet):
+    queryset = Article
+    serializer_class = ArticleSerializer
+    authentication_classes = [token_auth]
+    permission_classes = [IsAuthenticated]
+```
+
+Built-in backends:
+
+- **`TokenAuthentication`** — `Authorization: Token <key>` (or `Bearer` with `keyword="Bearer"`)
+- **`BasicAuthentication`** — HTTP Basic with a `get_user_by_credentials(username, password)` callback
+- **`SessionAuthentication`** — Session-based with a `get_user_from_session(request)` callback
+
+Unauthenticated requests to views with authentication backends return **401** (not 403).
+
+### Throttling
+
+Rate-limit requests with throttle backends:
+
+```python
+from fastrest.throttling import SimpleRateThrottle
+
+class BurstRateThrottle(SimpleRateThrottle):
+    rate = "60/min"
+
+    def get_cache_key(self, request, view):
+        return f"burst_{self.get_ident(request)}"
+
+class ArticleViewSet(ModelViewSet):
+    queryset = Article
+    serializer_class = ArticleSerializer
+    throttle_classes = [BurstRateThrottle]
+```
+
+Built-in throttles:
+
+- **`AnonRateThrottle`** — Throttle unauthenticated requests by IP
+- **`UserRateThrottle`** — Throttle authenticated requests by user ID, anonymous by IP
+
+Rate strings: `"100/hour"`, `"10/min"`, `"1000/day"`, `"5/sec"`.
+
+Throttled responses return **429** with a `Retry-After` header.
+
+### App Configuration
+
+Bind settings per-app, just like Django's `settings.py`:
+
+```python
+from fastrest.settings import configure
+
+app = FastAPI()
+configure(app, {
+    "DEFAULT_PAGINATION_CLASS": "fastrest.pagination.PageNumberPagination",
+    "PAGE_SIZE": 20,
+    "DEFAULT_PERMISSION_CLASSES": ["fastrest.permissions.IsAuthenticated"],
+    "DEFAULT_AUTHENTICATION_CLASSES": [token_auth],
+    "SKILL_NAME": "my-api",
+    "MCP_PREFIX": "/mcp",
+})
+```
+
+Settings resolve in order: **viewset attribute → app config → framework default**. Unknown keys raise `ValueError` by default (set `STRICT_SETTINGS=False` to allow).
+
+### Auth Scopes
+
+Permission class for scope-based access control:
+
+```python
+from fastrest.permissions import HasScope, IsAuthenticated
+
+class ArticleViewSet(ModelViewSet):
+    queryset = Article
+    serializer_class = ArticleSerializer
+    permission_classes = [IsAuthenticated & HasScope("articles:read")]
+```
+
+Scopes are read from `request.auth.scopes` (a list of strings set by your authentication backend).
+
+### Agent Integration (Skills & MCP)
+
+FastREST auto-generates agent-compatible interfaces from your viewsets — no extra code needed.
+
+**SKILL.md** — Machine-readable API documentation for AI agents:
+
+```python
+# Auto-served at GET /SKILL.md and GET /{resource}/SKILL.md
+# Includes: fields, endpoints, auth requirements, query parameters, examples
+# Customize per-viewset:
+class BookViewSet(ModelViewSet):
+    skill_description = "Manage the book catalog"
+    skill_exclude_actions = ["destroy"]
+    skill_examples = [{"description": "Search books", "request": "GET /books?search=python", "response": "200"}]
+```
+
+**MCP Server** — Built-in Model Context Protocol server:
+
+```python
+from fastrest.mcp import mount_mcp
+
+# One line to add MCP tools for all your viewsets
+mount_mcp(app, router)
+# Tools are auto-generated: books_list, books_create, books_retrieve, etc.
+# Auth, permissions, and throttling all apply to MCP tool calls
+```
+
+**API Manifest** — Structured JSON metadata at `GET /manifest.json`:
+
+```json
+{
+  "version": "1.0",
+  "name": "my-api",
+  "resources": [{"name": "books", "prefix": "books", "actions": [...], "fields": [...]}],
+  "mcp": {"enabled": true, "prefix": "/mcp"},
+  "skills": {"enabled": true, "endpoint": "/SKILL.md"}
+}
+```
+
+### Content Negotiation
+
+Select response format based on the `Accept` header:
+
+```python
+from fastrest.negotiation import DefaultContentNegotiation, JSONRenderer, BrowsableAPIRenderer
+
+# Renderers and negotiation are available for custom use
+negotiation = DefaultContentNegotiation()
+renderer, media_type = negotiation.select_renderer(request, [JSONRenderer(), BrowsableAPIRenderer()])
+```
+
 ### Routers
 
 ```python
@@ -372,18 +517,36 @@ FastREST implements the core DRF public API. If you've used DRF, you already kno
 | `APIClient` (test) | `APIClient` (test) | Done |
 | Pagination | `PageNumberPagination`, `LimitOffsetPagination` | Done |
 | Filtering/Search | `SearchFilter`, `OrderingFilter` | Done |
-| Authentication backends | — | Planned |
-| Throttling | — | Planned |
-| Content negotiation | — | Planned |
+| Authentication backends | `TokenAuthentication`, `BasicAuthentication`, `SessionAuthentication` | Done |
+| Throttling | `SimpleRateThrottle`, `AnonRateThrottle`, `UserRateThrottle` | Done |
+| Content negotiation | `DefaultContentNegotiation`, `JSONRenderer`, `BrowsableAPIRenderer` | Done |
+| App configuration | `configure(app, settings)`, `get_settings(request)` | Done |
+| Auth scopes | `HasScope` permission class | Done |
+| Agent Skills (SKILL.md) | Auto-generated from viewsets/serializers | Done |
+| MCP Server | Built-in MCP tools from viewsets | Done |
+| API Manifest | `GET /manifest.json` | Done |
 
 ---
+
+## Installation
+
+```bash
+# Core + SQLAlchemy (most common)
+pip install fastrest[sqlalchemy]
+
+# With MCP server support
+pip install fastrest[sqlalchemy,mcp]
+
+# Core only (bring your own ORM adapter)
+pip install fastrest
+```
 
 ## Requirements
 
 - Python 3.10+
 - FastAPI 0.100+
 - Pydantic 2.0+
-- SQLAlchemy 2.0+ (async)
+- SQLAlchemy 2.0+ (async) — via `fastrest[sqlalchemy]`
 
 ## License
 

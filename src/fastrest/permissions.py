@@ -91,3 +91,20 @@ class IsAuthenticatedOrReadOnly(BasePermission):
         if request.method in self.SAFE_METHODS:
             return True
         return request.user is not None and bool(request.user)
+
+
+class HasScope(BasePermission):
+    """Check that the request's auth token has required scopes.
+
+    Scopes are read from request.auth.scopes (a list of strings).
+    If no required scopes are specified, permission is granted.
+    """
+
+    def __init__(self, *required_scopes: str):
+        self.required_scopes = set(required_scopes)
+
+    def has_permission(self, request: Any, view: Any) -> bool:
+        if not self.required_scopes:
+            return True
+        token_scopes = set(getattr(getattr(request, "auth", None) or object(), "scopes", []))
+        return self.required_scopes.issubset(token_scopes)

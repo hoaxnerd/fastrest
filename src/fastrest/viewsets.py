@@ -95,7 +95,16 @@ class ViewSetMixin:
             if action_name == 'destroy':
                 action_response_model = None
             elif action_name == 'list':
-                action_response_model = list[response_model] if response_model else None
+                pagination_cls = getattr(cls, 'pagination_class', None)
+                if pagination_cls and response_model:
+                    from fastrest.openapi import paginated_response_model
+                    action_response_model = paginated_response_model(
+                        response_model, f"{cap_basename}PaginatedResponse"
+                    )
+                elif response_model:
+                    action_response_model = list[response_model]
+                else:
+                    action_response_model = None
             else:
                 action_response_model = response_model
 
@@ -118,7 +127,7 @@ class ViewSetMixin:
             endpoint_fn.__name__ = f"{basename}_{action_name}"
             endpoint_fn.__qualname__ = f"{basename}_{action_name}"
 
-            endpoints[action_name] = {
+            endpoint_info = {
                 'endpoint_fn': endpoint_fn,
                 'methods': [method.upper()],
                 'status_code': status_code,
@@ -126,6 +135,13 @@ class ViewSetMixin:
                 'summary': summary,
                 'operation_id': operation_id,
             }
+
+            # Merge per-action OpenAPI metadata if defined on the viewset
+            openapi_meta = getattr(cls, 'openapi_meta', None)
+            if openapi_meta and action_name in openapi_meta:
+                endpoint_info['openapi_extra'] = openapi_meta[action_name]
+
+            endpoints[action_name] = endpoint_info
 
         return endpoints
 

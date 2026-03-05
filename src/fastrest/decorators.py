@@ -21,6 +21,11 @@ def action(
     detail: bool = False,
     url_path: str | None = None,
     url_name: str | None = None,
+    serializer_class: Any = None,
+    response_serializer_class: Any = None,
+    mcp: bool = True,
+    mcp_description: str | None = None,
+    skill: bool = True,
     **kwargs: Any,
 ) -> Callable:
     methods = methods or ["get"]
@@ -30,6 +35,11 @@ def action(
         func.detail = detail
         func.url_path = url_path or func.__name__
         func.url_name = url_name or func.__name__.replace("_", "-")
+        func.serializer_class = serializer_class
+        func.response_serializer_class = response_serializer_class
+        func.mcp = mcp
+        func.mcp_description = mcp_description
+        func.skill = skill
         func.kwargs = kwargs
         return func
 

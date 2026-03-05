@@ -1,6 +1,6 @@
 from fastrest.permissions import (
     AllowAny, IsAuthenticated, IsAdminUser, IsAuthenticatedOrReadOnly,
-    BasePermission,
+    BasePermission, HasScope,
 )
 
 
@@ -16,6 +16,11 @@ class FakeUser:
 
     def __bool__(self):
         return True
+
+
+class FakeAuth:
+    def __init__(self, scopes=None):
+        self.scopes = scopes or []
 
 
 class TestAllowAny:
@@ -77,4 +82,49 @@ class TestComposition:
         assert perm.has_permission(req, None) is True
 
         req2 = FakeRequest(user=FakeUser())
+        assert perm.has_permission(req2, None) is False
+
+
+class TestHasScope:
+    def test_no_scopes_required_allows(self):
+        perm = HasScope()
+        req = FakeRequest(user=FakeUser())
+        req.auth = FakeAuth(scopes=[])
+        assert perm.has_permission(req, None) is True
+
+    def test_matching_scopes_allows(self):
+        perm = HasScope("books:read")
+        req = FakeRequest(user=FakeUser())
+        req.auth = FakeAuth(scopes=["books:read", "books:write"])
+        assert perm.has_permission(req, None) is True
+
+    def test_missing_scope_denies(self):
+        perm = HasScope("books:write")
+        req = FakeRequest(user=FakeUser())
+        req.auth = FakeAuth(scopes=["books:read"])
+        assert perm.has_permission(req, None) is False
+
+    def test_multiple_required_scopes(self):
+        perm = HasScope("books:read", "books:write")
+        req = FakeRequest(user=FakeUser())
+        req.auth = FakeAuth(scopes=["books:read"])
+        assert perm.has_permission(req, None) is False
+
+        req.auth = FakeAuth(scopes=["books:read", "books:write"])
+        assert perm.has_permission(req, None) is True
+
+    def test_no_auth_on_request_denies(self):
+        perm = HasScope("books:read")
+        req = FakeRequest(user=FakeUser())
+        # req.auth is None by default (no auth attribute)
+        assert perm.has_permission(req, None) is False
+
+    def test_composition_with_is_authenticated(self):
+        perm = IsAuthenticated() & HasScope("admin")
+        req = FakeRequest(user=FakeUser())
+        req.auth = FakeAuth(scopes=["admin"])
+        assert perm.has_permission(req, None) is True
+
+        req2 = FakeRequest(user=None)
+        req2.auth = FakeAuth(scopes=["admin"])
         assert perm.has_permission(req2, None) is False

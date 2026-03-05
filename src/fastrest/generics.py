@@ -32,8 +32,8 @@ class GenericAPIView(APIView):
     @property
     def adapter(self):
         if self._adapter is None:
-            from fastrest.compat.orm.sqlalchemy import adapter
-            self._adapter = adapter
+            from fastrest.compat.orm import get_default_adapter
+            self._adapter = get_default_adapter()
         return self._adapter
 
     def get_session(self):
@@ -80,18 +80,22 @@ class GenericAPIView(APIView):
         }
 
     def filter_queryset(self, queryset: list) -> list:
-        from fastrest.settings import api_settings
+        from fastrest.settings import get_settings
         backends = self.filter_backends
         if backends is None:
-            backends = api_settings.DEFAULT_FILTER_BACKENDS or []
+            settings = get_settings(self.request) if hasattr(self, 'request') else None
+            backends = (getattr(settings, 'DEFAULT_FILTER_BACKENDS', None) if settings else None) or []
         for backend_cls in backends:
             backend = backend_cls() if isinstance(backend_cls, type) else backend_cls
             queryset = backend.filter_queryset(self.request, queryset, self)
         return queryset
 
     def paginate_queryset(self, queryset: list) -> list | None:
-        from fastrest.settings import api_settings
-        cls = self.pagination_class or api_settings.DEFAULT_PAGINATION_CLASS
+        from fastrest.settings import get_settings
+        cls = self.pagination_class
+        if cls is None:
+            settings = get_settings(self.request) if hasattr(self, 'request') else None
+            cls = getattr(settings, 'DEFAULT_PAGINATION_CLASS', None) if settings else None
         if cls is None:
             return None
         self._paginator = cls()

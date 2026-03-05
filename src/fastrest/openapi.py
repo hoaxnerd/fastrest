@@ -76,6 +76,17 @@ def serializer_to_response_model(serializer_cls, name: str | None = None):
     return model
 
 
+def paginated_response_model(item_model, name: str):
+    """Build a Pydantic model for paginated envelope responses."""
+    return create_model(
+        name,
+        count=(int, ...),
+        next=(Optional[str], None),
+        previous=(Optional[str], None),
+        results=(list[item_model], ...),
+    )
+
+
 def serializer_to_request_model(serializer_cls, name: str | None = None, partial: bool = False):
     """Build a Pydantic model for writable (non-read-only) fields."""
     suffix = "PatchRequest" if partial else "Request"

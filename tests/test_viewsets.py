@@ -126,3 +126,77 @@ async def test_custom_action(setup_app):
     client, _ = setup_app
     resp = await client.get("/items/featured")
     assert resp.status_code == 200
+
+
+# --- Per-action OpenAPI metadata tests ---
+
+
+class MetaItemSerializer(ModelSerializer):
+    class Meta:
+        model = Item
+        fields = ["id", "name", "description", "price"]
+
+
+class MetaItemViewSet(ModelViewSet):
+    serializer_class = MetaItemSerializer
+    queryset = Item
+    openapi_meta = {
+        "destroy": {"deprecated": True},
+        "retrieve": {"responses": {404: {"description": "Item not found"}}},
+        "list": {"description": "List all available items"},
+    }
+
+
+class NoMetaItemViewSet(ModelViewSet):
+    serializer_class = MetaItemSerializer
+    queryset = Item
+
+
+def _build_openapi(viewset_cls, prefix="items", basename="item"):
+    """Helper to build a FastAPI app and return its OpenAPI schema."""
+    app = FastAPI()
+    router = DefaultRouter()
+    router.register(prefix, viewset_cls, basename=basename)
+    app.include_router(router.urls)
+    return app.openapi()
+
+
+def test_openapi_meta_deprecated():
+    """Viewset with openapi_meta marking destroy as deprecated should set deprecated on the DELETE endpoint."""
+    schema = _build_openapi(MetaItemViewSet)
+    delete_op = schema["paths"]["/items/{pk}"]["delete"]
+    assert delete_op.get("deprecated") is True
+
+    # Other endpoints should NOT be deprecated
+    get_op = schema["paths"]["/items/{pk}"]["get"]
+    assert get_op.get("deprecated") is not True
+
+
+def test_openapi_meta_responses():
+    """Viewset with openapi_meta responses should pass them through to the OpenAPI schema."""
+    schema = _build_openapi(MetaItemViewSet)
+    get_op = schema["paths"]["/items/{pk}"]["get"]
+    assert "404" in get_op["responses"]
+    assert get_op["responses"]["404"]["description"] == "Item not found"
+
+
+def test_openapi_meta_description():
+    """Viewset with openapi_meta description should override/set the endpoint description."""
+    schema = _build_openapi(MetaItemViewSet)
+    list_op = schema["paths"]["/items"]["get"]
+    assert list_op.get("description") == "List all available items"
+
+
+def test_viewset_without_openapi_meta():
+    """Viewsets without openapi_meta should still work normally."""
+    schema = _build_openapi(NoMetaItemViewSet)
+    # All standard endpoints should exist
+    assert "get" in schema["paths"]["/items"]
+    assert "post" in schema["paths"]["/items"]
+    assert "get" in schema["paths"]["/items/{pk}"]
+    assert "put" in schema["paths"]["/items/{pk}"]
+    assert "delete" in schema["paths"]["/items/{pk}"]
+
+    # No deprecated flags
+    delete_op = schema["paths"]["/items/{pk}"]["delete"]
+    assert delete_op.get("deprecated") is not True

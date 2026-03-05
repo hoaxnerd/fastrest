@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fastrest"
-version = "0.1.1"
+version = "0.1.2"
 description = "DRF inspired REST Framework for FastAPI"
 readme = "README.md"
 license = "BSD-3-Clause"
@@ -14,7 +14,7 @@ authors = [
 ]
 keywords = ["fastapi", "rest", "api", "drf", "django-rest-framework", "async", "pydantic", "sqlalchemy"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: BSD License",
     "Programming Language :: Python :: 3",
@@ -30,17 +30,24 @@ classifiers = [
 dependencies = [
     "fastapi>=0.100",
     "pydantic>=2.0",
-    "sqlalchemy[asyncio]>=2.0",
     "starlette",
 ]
 
 [project.optional-dependencies]
+sqlalchemy = [
+    "sqlalchemy[asyncio]>=2.0",
+]
+mcp = [
+    "mcp>=1.0",
+]
 dev = [
     "pytest>=7.0",
     "pytest-asyncio>=0.21",
     "httpx>=0.24",
+    "sqlalchemy[asyncio]>=2.0",
     "aiosqlite>=0.19",
     "uvicorn>=0.20",
+    "mcp>=1.0",
 ]
 
 [project.urls]
