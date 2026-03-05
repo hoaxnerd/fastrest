@@ -15,11 +15,18 @@
 
 FastREST lets you build async REST APIs using the patterns you already know from DRF — serializers, viewsets, routers, permissions — running on FastAPI with Pydantic validation and auto-generated OpenAPI docs.
 
-```
-pip install fastrest
-pip install fastrest[sqlalchemy]
-pip install fastrest[mcp]
+```bash
+# With MCP server and SQLAlchemy support
 pip install fastrest[sqlalchemy,mcp]
+
+# Core + SQLAlchemy (most common)
+pip install fastrest[sqlalchemy]
+
+# Core + MCP
+pip install fastrest[mcp]
+
+# Core only (bring your own ORM adapter)
+pip install fastrest
 ```
 
 > **Status:** Beta (0.1.2). The core API is stable for serializers, viewsets, routers, pagination, filtering, authentication, throttling, content negotiation, and agent integration (Skills & MCP).
@@ -527,19 +534,6 @@ FastREST implements the core DRF public API. If you've used DRF, you already kno
 | API Manifest | `GET /manifest.json` | Done |
 
 ---
-
-## Installation
-
-```bash
-# Core + SQLAlchemy (most common)
-pip install fastrest[sqlalchemy]
-
-# With MCP server support
-pip install fastrest[sqlalchemy,mcp]
-
-# Core only (bring your own ORM adapter)
-pip install fastrest
-```
 
 ## Requirements
 
