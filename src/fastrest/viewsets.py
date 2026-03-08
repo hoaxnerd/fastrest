@@ -194,6 +194,7 @@ class ViewSetMixin:
     def _make_detail_endpoint(cls, actions: dict, pk_type: type):
         async def endpoint(request: FastAPIRequest, pk: int) -> Any:
             return await cls._dispatch_view(actions, {}, request, pk=pk)
+        endpoint.__annotations__['pk'] = pk_type
         return endpoint
 
     @classmethod
@@ -213,10 +214,11 @@ class ViewSetMixin:
         if request_model:
             async def endpoint(request: FastAPIRequest, pk: int = 0, body=None) -> Any:
                 return await cls._dispatch_view(actions, {}, request, pk=pk, _body=body)
-            endpoint.__annotations__ = {'request': FastAPIRequest, 'pk': int, 'body': request_model, 'return': Any}
+            endpoint.__annotations__ = {'request': FastAPIRequest, 'pk': pk_type, 'body': request_model, 'return': Any}
         else:
             async def endpoint(request: FastAPIRequest, pk: int) -> Any:
                 return await cls._dispatch_view(actions, {}, request, pk=pk)
+            endpoint.__annotations__['pk'] = pk_type
         return endpoint
 
     @classmethod
