@@ -22,6 +22,7 @@ class ViewSetMixin:
     action: str | None = None
     basename: str | None = None
     lookup_field_type: type = int
+    action_map: dict[str, str] = {}
 
     @classmethod
     def as_view(cls, actions: dict[str, str] | None = None, **initkwargs: Any):
@@ -51,7 +52,7 @@ class ViewSetMixin:
         return view
 
     @classmethod
-    def get_action_endpoints(cls, actions: dict[str, str], basename: str, serializer_class=None):
+    def get_action_endpoints(cls, actions: dict[str, str], basename: str, serializer_class: type | None = None):
         """Produce separate endpoint functions per action with full metadata."""
         from fastrest.openapi import serializer_to_response_model, serializer_to_request_model
 

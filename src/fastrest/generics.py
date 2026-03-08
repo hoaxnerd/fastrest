@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from fastrest.compat.orm.base import ORMAdapter
+    from fastrest.pagination import BasePagination
+    from fastrest.filters import BaseFilterBackend
 
 from fastrest.views import APIView
 from fastrest.response import Response
@@ -17,26 +22,29 @@ from fastrest.mixins import (
 
 
 class GenericAPIView(APIView):
-    queryset = None  # Model class
-    serializer_class = None
+    queryset: type | None = None  # Model class
+    serializer_class: type | None = None
     lookup_field: str = "pk"
     lookup_url_kwarg: str | None = None
-    dependencies: list = []
-    pagination_class = None
-    filter_backends = None
+    lookup_field_type: type = int
+    dependencies: list[Any] = []
+    pagination_class: type[BasePagination] | None = None
+    filter_backends: list[type[BaseFilterBackend]] | None = None
 
-    _session = None
-    _paginator = None
-    _adapter = None
+    # Session type is ORM-dependent (e.g. AsyncSession for SQLAlchemy).
+    # Can't type it here without coupling to a specific backend.
+    _session: Any = None
+    _paginator: BasePagination | None = None
+    _adapter: ORMAdapter | None = None
 
     @property
-    def adapter(self):
+    def adapter(self) -> ORMAdapter:
         if self._adapter is None:
             from fastrest.compat.orm import get_default_adapter
             self._adapter = get_default_adapter()
         return self._adapter
 
-    def get_session(self):
+    def get_session(self) -> Any:
         return self._session
 
     def set_session(self, session: Any) -> None:
@@ -72,7 +80,7 @@ class GenericAPIView(APIView):
     def get_serializer_class(self) -> type:
         return self.serializer_class
 
-    def get_serializer_context(self) -> dict:
+    def get_serializer_context(self) -> dict[str, Any]:
         return {
             "request": getattr(self, "request", None),
             "view": self,
@@ -101,7 +109,7 @@ class GenericAPIView(APIView):
         self._paginator = cls()
         return self._paginator.paginate_queryset(queryset, self.request, view=self)
 
-    def get_paginated_response(self, data: list) -> dict:
+    def get_paginated_response(self, data: list) -> dict[str, Any]:
         return self._paginator.get_paginated_response(data)
 
 

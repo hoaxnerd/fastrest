@@ -11,6 +11,9 @@ from fastrest.permissions import AllowAny
 
 
 class APIView:
+    request: Request
+    kwargs: dict[str, Any]
+
     permission_classes: list = [AllowAny]
     authentication_classes: list = []
     throttle_classes: list = []
