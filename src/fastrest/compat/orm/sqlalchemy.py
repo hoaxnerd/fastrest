@@ -11,23 +11,88 @@ from sqlalchemy.orm import RelationshipProperty
 from .base import ORMAdapter, FieldInfo, RelationInfo
 
 
-# Map SQLAlchemy type names to generic field type strings
+# Map SQLAlchemy type names to generic field type strings.
+# Covers generic CamelCase types, SQL standard UPPERCASE types,
+# and dialect-specific types (PostgreSQL, MySQL, MSSQL, Oracle).
 _TYPE_MAP: dict[str, str] = {
-    "INTEGER": "integer",
-    "BIGINTEGER": "integer",
-    "SMALLINTEGER": "integer",
-    "VARCHAR": "string",
-    "STRING": "string",
-    "TEXT": "text",
-    "BOOLEAN": "boolean",
-    "FLOAT": "float",
-    "NUMERIC": "decimal",
-    "DECIMAL": "decimal",
+    # ── Integer types ──
+    "INTEGER": "integer", "BIGINTEGER": "integer", "SMALLINTEGER": "integer",
+    "INT": "integer", "BIGINT": "integer", "SMALLINT": "integer",
+    "TINYINT": "integer", "MEDIUMINT": "integer",
+
+    # ── String types ──
+    "VARCHAR": "string", "STRING": "string", "CHAR": "string",
+    "NCHAR": "string", "NVARCHAR": "string",
+    "UNICODE": "string",
+    "NVARCHAR2": "string", "VARCHAR2": "string",  # Oracle
+    "CITEXT": "string",  # PostgreSQL
+
+    # ── Text types ──
+    "TEXT": "text", "UNICODETEXT": "text", "CLOB": "text", "NCLOB": "text",
+    "TINYTEXT": "text", "MEDIUMTEXT": "text", "LONGTEXT": "text",  # MySQL
+    "LONG": "text",  # Oracle
+
+    # ── Boolean ──
+    "BOOLEAN": "boolean", "MATCHTYPE": "boolean",
+
+    # ── Floating point ──
+    "FLOAT": "float", "REAL": "float",
+    "DOUBLE": "float", "DOUBLE_PRECISION": "float",
+
+    # ── Decimal / Numeric ──
+    "NUMERIC": "decimal", "DECIMAL": "decimal",
+    "NUMBER": "decimal",  # Oracle
+    "MONEY": "decimal",  # PostgreSQL
+
+    # ── Date / Time ──
     "DATE": "date",
-    "DATETIME": "datetime",
+    "DATETIME": "datetime", "TIMESTAMP": "datetime",
     "TIME": "time",
-    "JSON": "json",
-    "UUID": "uuid",
+    "INTERVAL": "duration",
+
+    # ── JSON ──
+    "JSON": "json", "JSONB": "json",
+
+    # ── UUID ──
+    "UUID": "uuid", "UNIQUEIDENTIFIER": "uuid",  # MSSQL
+
+    # ── Binary ──
+    "BLOB": "binary", "BINARY": "binary", "VARBINARY": "binary",
+    "LARGEBINARY": "binary", "BYTEA": "binary",  # PostgreSQL
+    "TINYBLOB": "binary", "MEDIUMBLOB": "binary", "LONGBLOB": "binary",  # MySQL
+    "IMAGE": "binary",  # MSSQL
+    "RAW": "binary", "BFILE": "binary",  # Oracle
+    "PICKLETYPE": "binary",
+
+    # ── Enum ──
+    "ENUM": "choice",
+
+    # ── Array (PostgreSQL) ──
+    "ARRAY": "list",
+
+    # ── Key-value (PostgreSQL) ──
+    "HSTORE": "dict",
+
+    # ── Network types (PostgreSQL) ──
+    "INET": "ip", "CIDR": "ip",
+    "MACADDR": "string", "MACADDR8": "string",
+
+    # ── Full-text search (PostgreSQL) ──
+    "TSVECTOR": "string", "TSQUERY": "string",
+
+    # ── PostgreSQL misc ──
+    "BIT": "string", "JSONPATH": "string",
+    "OID": "integer", "REGCLASS": "string", "REGCONFIG": "string",
+
+    # ── PostgreSQL range types ──
+    "INT4RANGE": "json", "INT8RANGE": "json", "NUMRANGE": "json",
+    "DATERANGE": "json", "TSRANGE": "json", "TSTZRANGE": "json",
+    "INT4MULTIRANGE": "json", "INT8MULTIRANGE": "json",
+    "NUMMULTIRANGE": "json", "DATEMULTIRANGE": "json",
+    "TSMULTIRANGE": "json", "TSTZMULTIRANGE": "json",
+
+    # ── MySQL-specific ──
+    "YEAR": "integer", "SET": "list",
 }
 
 

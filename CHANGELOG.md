@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] - 2026-03-10
+
+### Added
+- **Tortoise ORM adapter**: `pip install fastrest[tortoise]` — full async adapter with session-less CRUD, `Model.describe()` introspection, and comprehensive field type mapping (17 Tortoise field types)
+- **SQLModel adapter**: `pip install fastrest[sqlmodel]` — extends SQLAlchemy adapter with Pydantic metadata enrichment; set explicitly via `set_default_adapter()`
+- **Beanie adapter** (MongoDB): `pip install fastrest[beanie]` — full async ODM adapter with session-less CRUD, Pydantic `model_fields` introspection, `mongomock-motor` testing support
+- `requires_session` attribute on `ORMAdapter` base class — `False` for Tortoise and Beanie (no session middleware needed)
+- Auto-detection chain: SQLAlchemy → Tortoise → Beanie (SQLModel excluded from auto-detection since it co-installs SQLAlchemy)
+- Adapter contract test suite (`tests/adapter_contract.py`) — shared mixin testing all 12 adapter methods
+- **`router.serve(Model)`**: Zero-config CRUD API — auto-generates serializer, viewset, and routes from any ORM model in one line. Supports all viewset options (`fields`, `exclude`, `readonly`, `pagination_class`, `filter_backends`, `search_fields`, `ordering_fields`, `permission_classes`, etc.). Auto-infers URL prefix from model name (`Author` → `authors`, `BookReview` → `book-reviews`). Auto-detects PK type (string for MongoDB). Returns viewset class for further customization.
+
+### Changed
+- Expanded `FIELD_TYPE_MAP` in `fields.py`: added 9 new normalized types (`duration`, `email`, `url`, `slug`, `ip`, `choice`, `list`, `dict`, `binary`) mapping to existing Field classes
+- Expanded SQLAlchemy `_TYPE_MAP` from 14 to 80+ entries: covers all generic types, SQL standard types, and dialect-specific types (PostgreSQL JSONB/HSTORE/INET/ARRAY/range types, MySQL TINYINT/MEDIUMINT/YEAR/SET, MSSQL UNIQUEIDENTIFIER/IMAGE, Oracle NUMBER/NVARCHAR2/BFILE)
+
 ## [0.1.2] - 2026-03-06
 
 ### Changed

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections import namedtuple
 from typing import Any
 
@@ -10,6 +11,28 @@ from fastapi import APIRouter, Request as FastAPIRequest
 
 Route = namedtuple("Route", ["url", "mapping", "name", "detail", "initkwargs"])
 DynamicRoute = namedtuple("DynamicRoute", ["url", "name", "detail", "initkwargs"])
+
+
+def _model_name_to_prefix(name: str) -> str:
+    """Convert CamelCase model name to a plural, hyphenated URL prefix.
+
+    Examples::
+
+        Author → authors
+        BookReview → book-reviews
+        Category → categories
+        Address → addresses
+    """
+    words = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", name).lower().split()
+    last = words[-1]
+    if last.endswith(("s", "sh", "ch", "x", "z")):
+        last += "es"
+    elif last.endswith("y") and len(last) > 1 and last[-2] not in "aeiou":
+        last = last[:-1] + "ies"
+    else:
+        last += "s"
+    words[-1] = last
+    return "-".join(words)
 
 
 class BaseRouter:
@@ -22,6 +45,99 @@ class BaseRouter:
         if basename is None:
             basename = prefix.strip("/").replace("/", "-")
         self.registry.append((prefix, viewset, basename))
+
+    def serve(
+        self,
+        model: type,
+        prefix: str | None = None,
+        basename: str | None = None,
+        *,
+        # Serializer options
+        fields: str | list = "__all__",
+        exclude: list | None = None,
+        read_only_fields: list | None = None,
+        serializer_class: type | None = None,
+        # ViewSet options
+        readonly: bool = False,
+        viewset_class: type | None = None,
+        permission_classes: list | None = None,
+        authentication_classes: list | None = None,
+        throttle_classes: list | None = None,
+        pagination_class: type | None = None,
+        filter_backends: list | None = None,
+        search_fields: list | None = None,
+        ordering_fields: list | None = None,
+        ordering: list | None = None,
+    ) -> type:
+        """Register a model with auto-generated serializer and viewset.
+
+        The simplest way to expose a model as a REST API::
+
+            router = DefaultRouter()
+            router.serve(Author)
+            router.serve(Book, search_fields=["title"], ordering_fields=["price"])
+
+        Returns the generated viewset class for further customization.
+        """
+        from fastrest.serializers import ModelSerializer
+        from fastrest.viewsets import ModelViewSet, ReadOnlyModelViewSet
+
+        model_name = model.__name__
+
+        if prefix is None:
+            prefix = _model_name_to_prefix(model_name)
+        if basename is None:
+            basename = prefix.strip("/").replace("/", "-")
+
+        # Build serializer class (unless user provided one)
+        if serializer_class is None:
+            meta_attrs: dict[str, Any] = {"model": model, "fields": fields}
+            if exclude is not None:
+                meta_attrs["exclude"] = exclude
+            if read_only_fields is not None:
+                meta_attrs["read_only_fields"] = read_only_fields
+            meta = type("Meta", (), meta_attrs)
+            serializer_class = type(
+                f"{model_name}AutoSerializer", (ModelSerializer,), {"Meta": meta},
+            )
+
+        # Build viewset class
+        base_cls = viewset_class or (ReadOnlyModelViewSet if readonly else ModelViewSet)
+        viewset_attrs: dict[str, Any] = {
+            "queryset": model,
+            "serializer_class": serializer_class,
+        }
+        if permission_classes is not None:
+            viewset_attrs["permission_classes"] = permission_classes
+        if authentication_classes is not None:
+            viewset_attrs["authentication_classes"] = authentication_classes
+        if throttle_classes is not None:
+            viewset_attrs["throttle_classes"] = throttle_classes
+        if pagination_class is not None:
+            viewset_attrs["pagination_class"] = pagination_class
+        if filter_backends is not None:
+            viewset_attrs["filter_backends"] = filter_backends
+        if search_fields is not None:
+            viewset_attrs["search_fields"] = search_fields
+        if ordering_fields is not None:
+            viewset_attrs["ordering_fields"] = ordering_fields
+        if ordering is not None:
+            viewset_attrs["ordering"] = ordering
+
+        viewset_cls = type(f"{model_name}AutoViewSet", (base_cls,), viewset_attrs)
+
+        # Auto-detect PK type for URL parameter (string for MongoDB ObjectId, etc.)
+        try:
+            from fastrest.compat.orm import get_default_adapter
+            adapter = get_default_adapter()
+            pk_field = adapter.get_pk_field(model)
+            if pk_field.field_type == "string":
+                viewset_cls.lookup_field_type = str
+        except Exception:
+            pass
+
+        self.register(prefix, viewset_cls, basename)
+        return viewset_cls
 
     @property
     def urls(self) -> APIRouter:

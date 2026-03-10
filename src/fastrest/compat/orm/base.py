@@ -29,6 +29,8 @@ class RelationInfo:
 
 
 class ORMAdapter(ABC):
+    requires_session: bool = True
+
     @abstractmethod
     def get_fields(self, model: Any) -> list[FieldInfo]:
         ...

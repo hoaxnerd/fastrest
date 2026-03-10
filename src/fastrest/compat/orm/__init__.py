@@ -13,7 +13,12 @@ def get_default_adapter():
     Resolution order:
     1. Explicitly set adapter via ``set_default_adapter()``
     2. SQLAlchemy (if installed)
-    3. Raise ImportError with guidance
+    3. Tortoise ORM (if installed)
+    4. Beanie (if installed)
+    5. Raise ImportError with guidance
+
+    Note: SQLModel is not auto-detected because it co-installs SQLAlchemy.
+    Use ``set_default_adapter()`` to select the SQLModel adapter explicitly.
     """
     global _default_adapter
     if _default_adapter is not None:
@@ -27,9 +32,27 @@ def get_default_adapter():
     except ImportError:
         pass
 
+    # Try Tortoise ORM
+    try:
+        from fastrest.compat.orm.tortoise import adapter
+        _default_adapter = adapter
+        return _default_adapter
+    except ImportError:
+        pass
+
+    # Try Beanie
+    try:
+        from fastrest.compat.orm.beanie import adapter
+        _default_adapter = adapter
+        return _default_adapter
+    except ImportError:
+        pass
+
     raise ImportError(
         "No ORM adapter found. Install an ORM backend:\n"
         "  pip install fastrest[sqlalchemy]\n"
+        "  pip install fastrest[tortoise]\n"
+        "  pip install fastrest[beanie]\n"
         "Or set a custom adapter via fastrest.compat.orm.set_default_adapter()."
     )
 

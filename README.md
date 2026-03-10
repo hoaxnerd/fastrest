@@ -11,47 +11,66 @@
 
 # FastREST
 
-**DRF inspired REST Framework for FastAPI.**
+**The REST framework that speaks to AI agents out of the box.**
 
-FastREST lets you build async REST APIs using the patterns you already know from DRF — serializers, viewsets, routers, permissions — running on FastAPI with Pydantic validation and auto-generated OpenAPI docs.
+FastREST builds async REST APIs from your models and auto-generates MCP tools, agent skill documents, and structured API manifests — so both humans and AI agents can consume your API without extra work.
 
-```bash
-# With MCP server and SQLAlchemy support
-pip install fastrest[sqlalchemy,mcp]
+Built on FastAPI + Pydantic. Inspired by Django REST Framework. Works with SQLAlchemy, Tortoise ORM, SQLModel, and Beanie (MongoDB).
 
-# Core + SQLAlchemy (most common)
-pip install fastrest[sqlalchemy]
-
-# Core + MCP
-pip install fastrest[mcp]
-
-# Core only (bring your own ORM adapter)
-pip install fastrest
+```python
+router.serve(Model)  # SQLAlchemy, Tortoise, SQLModel, or Beanie — any ORM model
 ```
 
-> **Status:** Beta (0.1.2). The core API is stable for serializers, viewsets, routers, pagination, filtering, authentication, throttling, content negotiation, and agent integration (Skills & MCP).
+```bash
+pip install fastrest[sqlalchemy]  # or fastrest[tortoise], fastrest[sqlmodel], fastrest[beanie]
+```
+
+That one line gives you:
+
+| Endpoint | What it does |
+|----------|-------------|
+| `GET /api/authors` | List, search, paginate, order |
+| `POST /api/authors` | Create with validated fields |
+| `GET /api/authors/{pk}` | Retrieve by primary key |
+| `PUT/PATCH /api/authors/{pk}` | Full or partial update |
+| `DELETE /api/authors/{pk}` | Delete (204) |
+| `GET /api/SKILL.md` | Agent-readable API documentation |
+| `GET /api/authors/SKILL.md` | Per-resource agent docs |
+| `GET /api/manifest.json` | Structured API metadata (JSON) |
+| `GET /api/mcp` | MCP server with auto-generated tools |
+| `GET /api/` | API root listing all resources |
+| `GET /docs` | Swagger UI with typed schemas |
+
+> **Status:** Beta (0.1.3). Core API is stable across serializers, viewsets, routers, permissions, pagination, filtering, auth, throttling, content negotiation, and agent integration.
 
 ---
 
-## Why FastREST?
+## Multi-ORM Support
 
-If you've used Django REST Framework, you know how productive it is. But DRF is synchronous and tied to Django's ORM. FastREST gives you the same developer experience on a modern async stack:
+Use any Python ORM. FastREST adapts automatically:
 
-| | DRF | FastREST |
-|---|---|---|
-| **Framework** | Django | FastAPI |
-| **ORM** | Django ORM | SQLAlchemy (async) |
-| **Validation** | DRF fields | DRF fields + Pydantic |
-| **Async** | No | Native async/await |
-| **OpenAPI** | Via drf-spectacular | Built-in (per-method routes) |
-| **Type hints** | Optional | First-class |
+| ORM | Install | Session Required | Auto-Detected |
+|-----|---------|-----------------|---------------|
+| **SQLAlchemy** | `pip install fastrest[sqlalchemy]` | Yes | Yes (default) |
+| **Tortoise ORM** | `pip install fastrest[tortoise]` | No | Yes |
+| **SQLModel** | `pip install fastrest[sqlmodel]` | Yes | No* |
+| **Beanie** (MongoDB) | `pip install fastrest[beanie]` | No | Yes |
 
-## Quick Start
-
-### 1. Define your model (SQLAlchemy)
+\* SQLModel co-installs SQLAlchemy, so auto-detection picks SQLAlchemy. Set the adapter explicitly:
 
 ```python
-from sqlalchemy import Column, Integer, String, Boolean
+from fastrest.compat.orm import set_default_adapter
+from fastrest.compat.orm.sqlmodel import SQLModelAdapter
+set_default_adapter(SQLModelAdapter())
+```
+
+### Any ORM, Same API
+
+The same `router.serve()` and `ModelViewSet` patterns work regardless of your ORM:
+
+```python
+# SQLAlchemy
+from sqlalchemy import Column, Integer, String
 from sqlalchemy.orm import DeclarativeBase
 
 class Base(DeclarativeBase):
@@ -59,58 +78,244 @@ class Base(DeclarativeBase):
 
 class Author(Base):
     __tablename__ = "authors"
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(Integer, primary_key=True)
     name = Column(String(200), nullable=False)
-    bio = Column(String(1000))
-    is_active = Column(Boolean, default=True)
 ```
 
-### 2. Define your serializer
+```python
+# Tortoise ORM — no session middleware needed
+from tortoise.models import Model
+from tortoise import fields
+
+class Author(Model):
+    id = fields.IntField(primary_key=True)
+    name = fields.CharField(max_length=200)
+    class Meta:
+        table = "authors"
+```
+
+```python
+# SQLModel
+from sqlmodel import SQLModel, Field
+
+class Author(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(max_length=200)
+```
+
+```python
+# Beanie (MongoDB) — auto-detects string PK
+from beanie import Document
+
+class Author(Document):
+    name: str
+    class Settings:
+        name = "authors"
+```
+
+```python
+# Same code for all of them
+router = DefaultRouter()
+router.serve(Author)
+```
+
+**Tortoise ORM** and **Beanie** don't require session injection middleware — they manage connections internally.
+
+**Custom adapters**: Subclass `ORMAdapter` from `fastrest.compat.orm.base` and call `set_default_adapter()`.
+
+---
+
+## AI Agent Integration
+
+FastREST is the first REST framework with **built-in agent support**. Define your viewsets once, and agents can discover and use your API automatically.
+
+### MCP Server — Tools for AI Agents
+
+Mount a [Model Context Protocol](https://modelcontextprotocol.io) server with one line. Every viewset action becomes an MCP tool that agents can call directly:
+
+```python
+from fastrest.mcp import mount_mcp
+
+mount_mcp(app, router)
+# Auto-generates tools: authors_list, authors_create, authors_retrieve,
+#                        books_list, books_create, books_retrieve, ...
+```
+
+MCP tools run through the **full request pipeline** — authentication, permissions, and throttling all apply to agent tool calls, exactly like HTTP requests. No separate auth layer to maintain.
+
+```python
+# Exclude specific actions from MCP
+class BookViewSet(ModelViewSet):
+    queryset = Book
+    serializer_class = BookSerializer
+
+    @action(methods=["post"], detail=True, mcp=False)  # hidden from MCP
+    async def internal_sync(self, request, **kwargs):
+        ...
+```
+
+Configure via settings:
+
+```python
+configure(app, {
+    "MCP_ENABLED": True,
+    "MCP_PREFIX": "/mcp",
+    "MCP_TOOL_NAME_FORMAT": "{basename}_{action}",
+    "MCP_EXCLUDE_VIEWSETS": ["InternalViewSet"],
+})
+```
+
+### SKILL.md — API Documentation for Agents
+
+FastREST auto-generates Markdown skill documents that AI agents can read to understand your API. Includes fields, types, constraints, endpoints, query parameters, auth requirements, and example requests:
+
+```
+GET /api/SKILL.md            → Full API skill document
+GET /api/books/SKILL.md      → Per-resource skill document
+```
+
+The output is a living spec — it regenerates from your code on every request, so it's always in sync with your actual API.
+
+```python
+# Customize what agents see per-viewset
+class BookViewSet(ModelViewSet):
+    queryset = Book
+    serializer_class = BookSerializer
+    skill_description = "Manage the book catalog. Supports search by title and ordering by price."
+    skill_exclude_actions = ["destroy"]          # hide delete from agents
+    skill_exclude_fields = ["internal_notes"]    # hide sensitive fields
+    skill_examples = [
+        {
+            "description": "Search for Python books",
+            "request": "GET /books?search=python",
+            "response": "200"
+        }
+    ]
+```
+
+Configure via settings:
+
+```python
+configure(app, {
+    "SKILL_ENABLED": True,
+    "SKILL_NAME": "bookstore-api",
+    "SKILL_BASE_URL": "https://api.example.com",
+    "SKILL_DESCRIPTION": "A bookstore API with full CRUD and search.",
+    "SKILL_AUTH_DESCRIPTION": "Use Bearer token in the Authorization header.",
+    "SKILL_INCLUDE_EXAMPLES": True,
+    "SKILL_MAX_EXAMPLES_PER_RESOURCE": 3,
+})
+```
+
+### API Manifest — Machine-Readable Metadata
+
+A structured JSON endpoint at `GET /manifest.json` that describes your entire API:
+
+```json
+{
+  "version": "1.0",
+  "name": "bookstore-api",
+  "base_url": "https://api.example.com",
+  "resources": [
+    {
+      "name": "book",
+      "prefix": "books",
+      "actions": ["list", "create", "retrieve", "update", "partial_update", "destroy", "in_stock"],
+      "fields": [
+        {"name": "id", "type": "integer", "read_only": true},
+        {"name": "title", "type": "string", "max_length": 300, "required": true},
+        {"name": "price", "type": "float", "required": true}
+      ],
+      "permissions": ["IsAuthenticated"],
+      "pagination": {"type": "PageNumberPagination", "page_size": 20},
+      "filters": {"search_fields": ["title", "description"], "ordering_fields": ["title", "price"]}
+    }
+  ],
+  "mcp": {"enabled": true, "prefix": "/mcp"},
+  "skills": {"enabled": true, "endpoint": "/SKILL.md"}
+}
+```
+
+---
+
+## DRF-Inspired Developer Experience
+
+If you've used Django REST Framework, you already know FastREST. Same patterns, async stack:
+
+| | DRF | FastREST |
+|---|---|---|
+| **Framework** | Django | FastAPI |
+| **ORM** | Django ORM | SQLAlchemy, Tortoise, SQLModel, Beanie |
+| **Validation** | DRF fields | DRF fields + Pydantic |
+| **Async** | No | Native async/await |
+| **OpenAPI** | Via drf-spectacular | Built-in (per-method typed routes) |
+| **Agent support** | No | MCP + SKILL.md + Manifest |
+
+---
+
+## Quick Start
+
+### Zero-Config: `router.serve()`
+
+One line per model. Auto-generates serializers, viewsets, and routes:
+
+```python
+from fastapi import FastAPI
+from fastrest.routers import DefaultRouter
+from models import Author, Book, Tag
+
+router = DefaultRouter()
+router.serve(Author)                                          # → /authors, /authors/{pk}
+router.serve(Book, search_fields=["title"], ordering_fields=["price"])
+router.serve(Tag, readonly=True)                              # GET only
+
+app = FastAPI(title="My API")
+app.include_router(router.urls, prefix="/api")
+```
+
+Prefixes are auto-inferred from model names: `Author` → `authors`, `BookReview` → `book-reviews`, `Category` → `categories`.
+
+`serve()` returns the viewset class for further customization:
+
+```python
+BookViewSet = router.serve(Book,
+    exclude=["secret_field"],
+    pagination_class=PageNumberPagination,
+    filter_backends=[SearchFilter, OrderingFilter],
+    search_fields=["title", "description"],
+    ordering_fields=["price", "title"],
+    permission_classes=[IsAuthenticated()],
+)
+BookViewSet.skill_description = "Manage the book catalog."
+```
+
+**All `serve()` options**: `prefix`, `basename`, `fields`, `exclude`, `read_only_fields`, `serializer_class`, `readonly`, `viewset_class`, `permission_classes`, `authentication_classes`, `throttle_classes`, `pagination_class`, `filter_backends`, `search_fields`, `ordering_fields`, `ordering`.
+
+### Full Control: Serializer + ViewSet + Router
+
+For complete customization, define each layer explicitly:
 
 ```python
 from fastrest.serializers import ModelSerializer
+from fastrest.viewsets import ModelViewSet
+from fastrest.routers import DefaultRouter
 
 class AuthorSerializer(ModelSerializer):
     class Meta:
         model = Author
         fields = ["id", "name", "bio", "is_active"]
         read_only_fields = ["id"]
-```
-
-### 3. Define your viewset
-
-```python
-from fastrest.viewsets import ModelViewSet
 
 class AuthorViewSet(ModelViewSet):
     queryset = Author
     serializer_class = AuthorSerializer
-```
-
-### 4. Register routes and create the app
-
-```python
-from fastapi import FastAPI
-from fastrest.routers import DefaultRouter
 
 router = DefaultRouter()
 router.register("authors", AuthorViewSet, basename="author")
 
-app = FastAPI(title="My API")
+app = FastAPI()
 app.include_router(router.urls, prefix="/api")
 ```
-
-That's it. You now have:
-
-- `GET /api/authors` — List all authors
-- `POST /api/authors` — Create an author (201)
-- `GET /api/authors/{pk}` — Retrieve an author
-- `PUT /api/authors/{pk}` — Update an author
-- `PATCH /api/authors/{pk}` — Partial update
-- `DELETE /api/authors/{pk}` — Delete an author (204)
-- `GET /api/` — API root listing all resources
-- `GET /docs` — Interactive Swagger UI with typed schemas
-- `GET /redoc` — ReDoc documentation
 
 ---
 
@@ -118,7 +323,7 @@ That's it. You now have:
 
 ### Serializers
 
-ModelSerializer auto-generates fields from your SQLAlchemy model, just like DRF:
+ModelSerializer auto-generates fields from your model and supports DRF-style validation:
 
 ```python
 from fastrest.serializers import ModelSerializer
@@ -126,44 +331,25 @@ from fastrest.fields import FloatField
 from fastrest.exceptions import ValidationError
 
 class BookSerializer(ModelSerializer):
-    # Override auto-generated fields
-    price = FloatField(min_value=0.01)
+    price = FloatField(min_value=0.01)  # override auto-generated field
 
     class Meta:
         model = Book
         fields = ["id", "title", "isbn", "price", "author_id"]
         read_only_fields = ["id"]
 
-    # Per-field validation hooks
     def validate_isbn(self, value):
         if value and len(value) not in (10, 13):
             raise ValidationError("ISBN must be 10 or 13 characters.")
         return value
 ```
 
-**Supported fields:** CharField, IntegerField, FloatField, BooleanField, DecimalField, DateTimeField, DateField, TimeField, UUIDField, EmailField, URLField, SlugField, ListField, DictField, JSONField, SerializerMethodField, and more.
+**Field library:** CharField, IntegerField, FloatField, BooleanField, DecimalField, DateTimeField, DateField, TimeField, UUIDField, EmailField, URLField, SlugField, IPAddressField, DurationField, ListField, DictField, JSONField, ChoiceField, SerializerMethodField, and more.
 
-### ViewSets
-
-```python
-from fastrest.viewsets import ModelViewSet, ReadOnlyModelViewSet
-
-class BookViewSet(ModelViewSet):
-    queryset = Book
-    serializer_class = BookSerializer
-
-    # Switch serializer based on action
-    def get_serializer_class(self):
-        if self.action == "retrieve":
-            return BookDetailSerializer
-        return BookSerializer
-```
-
-### Custom Actions
-
-Add custom endpoints to viewsets with the `@action` decorator:
+### ViewSets & Custom Actions
 
 ```python
+from fastrest.viewsets import ModelViewSet
 from fastrest.decorators import action
 from fastrest.response import Response
 
@@ -171,18 +357,22 @@ class BookViewSet(ModelViewSet):
     queryset = Book
     serializer_class = BookSerializer
 
+    def get_serializer_class(self):
+        if self.action == "retrieve":
+            return BookDetailSerializer
+        return BookSerializer
+
     @action(methods=["get"], detail=False, url_path="in-stock")
     async def in_stock(self, request, **kwargs):
-        """GET /api/books/in-stock — List only in-stock books."""
-        books = await self.adapter.filter_queryset(
-            Book, self.get_session(), in_stock=True
-        )
+        """GET /api/books/in-stock"""
+        books = await self.adapter.filter_queryset(Book, self.get_session(), in_stock=True)
         serializer = self.get_serializer(books, many=True)
         return Response(data=serializer.data)
 
-    @action(methods=["post"], detail=True, url_path="toggle-stock")
+    @action(methods=["post"], detail=True, url_path="toggle-stock",
+            mcp_description="Toggle the in-stock status of a book")
     async def toggle_stock(self, request, **kwargs):
-        """POST /api/books/{pk}/toggle-stock — Toggle in_stock flag."""
+        """POST /api/books/{pk}/toggle-stock"""
         book = await self.get_object()
         session = self.get_session()
         await self.adapter.update(book, session, in_stock=not book.in_stock)
@@ -190,12 +380,12 @@ class BookViewSet(ModelViewSet):
         return Response(data=serializer.data)
 ```
 
+The `@action` decorator supports: `methods`, `detail`, `url_path`, `url_name`, `serializer_class`, `response_serializer_class`, `mcp` (include in MCP tools), `mcp_description`, `skill` (include in SKILL.md).
+
 ### Pagination
 
-Add pagination to any viewset:
-
 ```python
-from fastrest.pagination import PageNumberPagination
+from fastrest.pagination import PageNumberPagination, LimitOffsetPagination
 
 class BookPagination(PageNumberPagination):
     page_size = 20
@@ -206,8 +396,6 @@ class BookViewSet(ModelViewSet):
     serializer_class = BookSerializer
     pagination_class = BookPagination
 ```
-
-Paginated list responses return an envelope:
 
 ```json
 {
@@ -222,15 +410,12 @@ Also available: `LimitOffsetPagination` with `?limit=20&offset=0`.
 
 ### Filtering & Search
 
-Add search and ordering with filter backends:
-
 ```python
 from fastrest.filters import SearchFilter, OrderingFilter
 
 class BookViewSet(ModelViewSet):
     queryset = Book
     serializer_class = BookSerializer
-    pagination_class = BookPagination
     filter_backends = [SearchFilter, OrderingFilter]
     search_fields = ["title", "description", "isbn"]
     ordering_fields = ["title", "price"]
@@ -247,7 +432,7 @@ class BookViewSet(ModelViewSet):
 Composable permission classes with `&`, `|`, `~` operators:
 
 ```python
-from fastrest.permissions import BasePermission, IsAuthenticated
+from fastrest.permissions import BasePermission, IsAuthenticated, IsAdminUser, HasScope
 
 class IsOwner(BasePermission):
     def has_object_permission(self, request, view, obj):
@@ -256,45 +441,51 @@ class IsOwner(BasePermission):
 class ArticleViewSet(ModelViewSet):
     queryset = Article
     serializer_class = ArticleSerializer
-    permission_classes = [IsAuthenticated & IsOwner]
+    # Compose with operators — works on instances
+    permission_classes = [IsAuthenticated() & (IsOwner() | IsAdminUser())]
 ```
 
-Built-in: `AllowAny`, `IsAuthenticated`, `IsAdminUser`, `IsAuthenticatedOrReadOnly`.
+Scope-based access control:
+
+```python
+class ArticleViewSet(ModelViewSet):
+    permission_classes = [IsAuthenticated() & HasScope("articles:write")]
+```
+
+Scopes are read from `request.auth.scopes` (set by your authentication backend).
+
+Built-in: `AllowAny`, `IsAuthenticated`, `IsAdminUser`, `IsAuthenticatedOrReadOnly`, `HasScope`.
 
 ### Authentication
 
-Pluggable authentication backends, just like DRF:
+Pluggable backends, just like DRF:
 
 ```python
-from fastrest.authentication import TokenAuthentication
+from fastrest.authentication import TokenAuthentication, BasicAuthentication, SessionAuthentication
 
-# Provide a lookup function that returns a user or None
-def get_user_by_token(token_key):
-    return User.objects.get(token=token_key)  # your lookup logic
-
-token_auth = TokenAuthentication(get_user_by_token=get_user_by_token)
+token_auth = TokenAuthentication(get_user_by_token=my_token_lookup)
+basic_auth = BasicAuthentication(get_user_by_credentials=my_credentials_check)
+session_auth = SessionAuthentication(get_user_from_session=my_session_resolver)
 
 class ArticleViewSet(ModelViewSet):
     queryset = Article
     serializer_class = ArticleSerializer
     authentication_classes = [token_auth]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated()]
 ```
 
-Built-in backends:
-
 - **`TokenAuthentication`** — `Authorization: Token <key>` (or `Bearer` with `keyword="Bearer"`)
-- **`BasicAuthentication`** — HTTP Basic with a `get_user_by_credentials(username, password)` callback
-- **`SessionAuthentication`** — Session-based with a `get_user_from_session(request)` callback
+- **`BasicAuthentication`** — HTTP Basic with a callback
+- **`SessionAuthentication`** — Session-based with a callback
 
-Unauthenticated requests to views with authentication backends return **401** (not 403).
+Unauthenticated requests return **401** (not 403) when authentication backends provide `authenticate_header`.
 
 ### Throttling
 
-Rate-limit requests with throttle backends:
+Rate-limit requests per user, IP, or custom key:
 
 ```python
-from fastrest.throttling import SimpleRateThrottle
+from fastrest.throttling import SimpleRateThrottle, AnonRateThrottle, UserRateThrottle
 
 class BurstRateThrottle(SimpleRateThrottle):
     rate = "60/min"
@@ -305,21 +496,17 @@ class BurstRateThrottle(SimpleRateThrottle):
 class ArticleViewSet(ModelViewSet):
     queryset = Article
     serializer_class = ArticleSerializer
-    throttle_classes = [BurstRateThrottle]
+    throttle_classes = [BurstRateThrottle()]
 ```
-
-Built-in throttles:
 
 - **`AnonRateThrottle`** — Throttle unauthenticated requests by IP
 - **`UserRateThrottle`** — Throttle authenticated requests by user ID, anonymous by IP
-
-Rate strings: `"100/hour"`, `"10/min"`, `"1000/day"`, `"5/sec"`.
-
-Throttled responses return **429** with a `Retry-After` header.
+- Rate strings: `"100/hour"`, `"10/min"`, `"1000/day"`, `"5/sec"`
+- Throttled responses return **429** with a `Retry-After` header
 
 ### App Configuration
 
-Bind settings per-app, just like Django's `settings.py`:
+Django-style settings per app:
 
 ```python
 from fastrest.settings import configure
@@ -328,68 +515,17 @@ app = FastAPI()
 configure(app, {
     "DEFAULT_PAGINATION_CLASS": "fastrest.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
-    "DEFAULT_PERMISSION_CLASSES": ["fastrest.permissions.IsAuthenticated"],
+    "DEFAULT_PERMISSION_CLASSES": [IsAuthenticated()],
     "DEFAULT_AUTHENTICATION_CLASSES": [token_auth],
+    "DEFAULT_THROTTLE_CLASSES": [AnonRateThrottle()],
+    "DEFAULT_FILTER_BACKENDS": [SearchFilter, OrderingFilter],
     "SKILL_NAME": "my-api",
+    "SKILL_BASE_URL": "https://api.example.com",
     "MCP_PREFIX": "/mcp",
 })
 ```
 
-Settings resolve in order: **viewset attribute → app config → framework default**. Unknown keys raise `ValueError` by default (set `STRICT_SETTINGS=False` to allow).
-
-### Auth Scopes
-
-Permission class for scope-based access control:
-
-```python
-from fastrest.permissions import HasScope, IsAuthenticated
-
-class ArticleViewSet(ModelViewSet):
-    queryset = Article
-    serializer_class = ArticleSerializer
-    permission_classes = [IsAuthenticated & HasScope("articles:read")]
-```
-
-Scopes are read from `request.auth.scopes` (a list of strings set by your authentication backend).
-
-### Agent Integration (Skills & MCP)
-
-FastREST auto-generates agent-compatible interfaces from your viewsets — no extra code needed.
-
-**SKILL.md** — Machine-readable API documentation for AI agents:
-
-```python
-# Auto-served at GET /SKILL.md and GET /{resource}/SKILL.md
-# Includes: fields, endpoints, auth requirements, query parameters, examples
-# Customize per-viewset:
-class BookViewSet(ModelViewSet):
-    skill_description = "Manage the book catalog"
-    skill_exclude_actions = ["destroy"]
-    skill_examples = [{"description": "Search books", "request": "GET /books?search=python", "response": "200"}]
-```
-
-**MCP Server** — Built-in Model Context Protocol server:
-
-```python
-from fastrest.mcp import mount_mcp
-
-# One line to add MCP tools for all your viewsets
-mount_mcp(app, router)
-# Tools are auto-generated: books_list, books_create, books_retrieve, etc.
-# Auth, permissions, and throttling all apply to MCP tool calls
-```
-
-**API Manifest** — Structured JSON metadata at `GET /manifest.json`:
-
-```json
-{
-  "version": "1.0",
-  "name": "my-api",
-  "resources": [{"name": "books", "prefix": "books", "actions": [...], "fields": [...]}],
-  "mcp": {"enabled": true, "prefix": "/mcp"},
-  "skills": {"enabled": true, "endpoint": "/SKILL.md"}
-}
-```
+Settings resolve in order: **viewset attribute > app config > framework default**. Unknown keys raise `ValueError` by default (set `STRICT_SETTINGS=False` to allow).
 
 ### Content Negotiation
 
@@ -398,31 +534,11 @@ Select response format based on the `Accept` header:
 ```python
 from fastrest.negotiation import DefaultContentNegotiation, JSONRenderer, BrowsableAPIRenderer
 
-# Renderers and negotiation are available for custom use
 negotiation = DefaultContentNegotiation()
 renderer, media_type = negotiation.select_renderer(request, [JSONRenderer(), BrowsableAPIRenderer()])
 ```
 
-### Routers
-
-```python
-from fastrest.routers import DefaultRouter, SimpleRouter
-
-# DefaultRouter adds an API root view at /
-router = DefaultRouter()
-router.register("authors", AuthorViewSet, basename="author")
-router.register("books", BookViewSet, basename="book")
-
-# SimpleRouter without the root view
-router = SimpleRouter()
-```
-
-Each HTTP method gets its own OpenAPI route with:
-- Correct status codes (201 for create, 204 for delete)
-- Typed `pk: int` path parameters
-- Request/response Pydantic schemas auto-generated from serializers
-- Tag-based grouping by resource
-- Unique operation IDs
+Supports quality factors (`Accept: application/json;q=0.9`), format suffixes, and wildcard matching.
 
 ### Validation
 
@@ -446,9 +562,47 @@ class ReviewSerializer(ModelSerializer):
             raise ValidationError("Low ratings require a comment.")
         return attrs
 
-    # 3. Field constraints via field kwargs
-    # e.g., CharField(max_length=500), IntegerField(min_value=1)
+    # 3. Field constraints via kwargs
+    # CharField(max_length=500), IntegerField(min_value=1, max_value=100)
 ```
+
+### Routers
+
+```python
+from fastrest.routers import DefaultRouter, SimpleRouter
+
+# DefaultRouter adds API root, SKILL.md, and manifest.json
+router = DefaultRouter()
+router.register("authors", AuthorViewSet, basename="author")
+router.register("books", BookViewSet, basename="book")
+
+# Or use serve() for zero-config
+router.serve(Author)
+router.serve(Book, prefix="books")
+
+# SimpleRouter — just the resource routes
+router = SimpleRouter()
+```
+
+Each HTTP method gets its own OpenAPI route with correct status codes (201 for create, 204 for delete), typed path parameters, and auto-generated Pydantic request/response schemas.
+
+### Generic Views
+
+For when you don't need the full viewset:
+
+```python
+from fastrest.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
+
+class AuthorList(ListCreateAPIView):
+    queryset = Author
+    serializer_class = AuthorSerializer
+
+class AuthorDetail(RetrieveUpdateDestroyAPIView):
+    queryset = Author
+    serializer_class = AuthorSerializer
+```
+
+Available: `CreateAPIView`, `ListAPIView`, `RetrieveAPIView`, `DestroyAPIView`, `UpdateAPIView`, `ListCreateAPIView`, `RetrieveUpdateAPIView`, `RetrieveDestroyAPIView`, `RetrieveUpdateDestroyAPIView`.
 
 ### Testing
 
@@ -478,38 +632,15 @@ async def test_list_authors(client):
     assert isinstance(resp.json(), list)
 ```
 
-### Generic Views
-
-For when you don't need the full viewset:
-
-```python
-from fastrest.generics import (
-    ListCreateAPIView,
-    RetrieveUpdateDestroyAPIView,
-)
-
-class AuthorList(ListCreateAPIView):
-    queryset = Author
-    serializer_class = AuthorSerializer
-
-class AuthorDetail(RetrieveUpdateDestroyAPIView):
-    queryset = Author
-    serializer_class = AuthorSerializer
-```
-
-Available: `CreateAPIView`, `ListAPIView`, `RetrieveAPIView`, `DestroyAPIView`, `UpdateAPIView`, `ListCreateAPIView`, `RetrieveUpdateAPIView`, `RetrieveDestroyAPIView`, `RetrieveUpdateDestroyAPIView`.
-
 ---
 
 ## Full Example
 
-See the [fastrest-example](https://github.com/hoaxnerd/fastrest-example) repo for a complete bookstore API with authors, books, tags, and reviews.
+See the [fastrest-example](https://github.com/hoaxnerd/fastrest-example) repo for a complete bookstore API with authors, books, tags, reviews, authentication, pagination, search, agent integration, and tests for SQLAlchemy, Tortoise, SQLModel, and Beanie.
 
 ---
 
 ## DRF Compatibility
-
-FastREST implements the core DRF public API. If you've used DRF, you already know FastREST:
 
 | DRF | FastREST | Status |
 |---|---|---|
@@ -524,14 +655,15 @@ FastREST implements the core DRF public API. If you've used DRF, you already kno
 | `APIClient` (test) | `APIClient` (test) | Done |
 | Pagination | `PageNumberPagination`, `LimitOffsetPagination` | Done |
 | Filtering/Search | `SearchFilter`, `OrderingFilter` | Done |
-| Authentication backends | `TokenAuthentication`, `BasicAuthentication`, `SessionAuthentication` | Done |
+| Authentication | `TokenAuthentication`, `BasicAuthentication`, `SessionAuthentication` | Done |
 | Throttling | `SimpleRateThrottle`, `AnonRateThrottle`, `UserRateThrottle` | Done |
 | Content negotiation | `DefaultContentNegotiation`, `JSONRenderer`, `BrowsableAPIRenderer` | Done |
 | App configuration | `configure(app, settings)`, `get_settings(request)` | Done |
 | Auth scopes | `HasScope` permission class | Done |
-| Agent Skills (SKILL.md) | Auto-generated from viewsets/serializers | Done |
-| MCP Server | Built-in MCP tools from viewsets | Done |
-| API Manifest | `GET /manifest.json` | Done |
+| — | `router.serve(Model)` — zero-config CRUD | Done |
+| — | MCP Server — AI agent tools | Done |
+| — | SKILL.md — agent skill documents | Done |
+| — | API Manifest — structured metadata | Done |
 
 ---
 
@@ -540,7 +672,7 @@ FastREST implements the core DRF public API. If you've used DRF, you already kno
 - Python 3.10+
 - FastAPI 0.100+
 - Pydantic 2.0+
-- SQLAlchemy 2.0+ (async) — via `fastrest[sqlalchemy]`
+- ORM of your choice via optional extras
 
 ## License
 

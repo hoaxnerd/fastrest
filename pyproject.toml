@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fastrest"
-version = "0.1.2"
+version = "0.1.3"
 description = "DRF inspired REST Framework for FastAPI"
 readme = "README.md"
 license = "BSD-3-Clause"
@@ -37,6 +37,17 @@ dependencies = [
 sqlalchemy = [
     "sqlalchemy[asyncio]>=2.0",
 ]
+tortoise = [
+    "tortoise-orm>=0.20",
+]
+sqlmodel = [
+    "sqlmodel>=0.0.14",
+    "sqlalchemy[asyncio]>=2.0",
+]
+beanie = [
+    "beanie>=1.23",
+    "motor>=3.0",
+]
 mcp = [
     "mcp>=1.0",
 ]
@@ -48,6 +59,11 @@ dev = [
     "aiosqlite>=0.19",
     "uvicorn>=0.20",
     "mcp>=1.0",
+    "tortoise-orm>=0.20",
+    "sqlmodel>=0.0.14",
+    "beanie>=1.23",
+    "motor>=3.0",
+    "mongomock-motor>=0.0.20",
 ]
 
 [project.urls]
