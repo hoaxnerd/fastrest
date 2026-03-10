@@ -22,7 +22,7 @@ router.serve(Model)  # SQLAlchemy, Tortoise, SQLModel, or Beanie — any ORM mod
 ```
 
 ```bash
-pip install fastrest[sqlalchemy]  # or fastrest[tortoise], fastrest[sqlmodel], fastrest[beanie]
+pip install fastrest[sqlalchemy, mcp]  # or fastrest[tortoise], fastrest[sqlmodel], fastrest[beanie]
 ```
 
 That one line gives you:
@@ -142,6 +142,11 @@ mount_mcp(app, router)
 ```
 
 MCP tools run through the **full request pipeline** — authentication, permissions, and throttling all apply to agent tool calls, exactly like HTTP requests. No separate auth layer to maintain.
+
+You must include optional "mcp" package while installation:
+```bash
+pip install fastrest[mcp] # You should also include your preferred ORM if not already installed -> fastrest[mcp, sqlmodel]
+```
 
 ```python
 # Exclude specific actions from MCP
