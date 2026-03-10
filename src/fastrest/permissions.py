@@ -24,19 +24,28 @@ class BasePermission(OperationHolderMixin):
         return True
 
 
+def _resolve_perm(perm: Any) -> Any:
+    """Resolve a permission to an instance: instantiate classes, pass through instances."""
+    if isinstance(perm, (BasePermission, _AND, _OR, _NOT)):
+        return perm
+    if isinstance(perm, type):
+        return perm()
+    return perm
+
+
 class _AND(OperationHolderMixin):
     def __init__(self, left: Any, right: Any):
         self.left = left
         self.right = right
 
     def has_permission(self, request: Any, view: Any) -> bool:
-        left = self.left if isinstance(self.left, BasePermission) else self.left()
-        right = self.right if isinstance(self.right, BasePermission) else self.right()
+        left = _resolve_perm(self.left)
+        right = _resolve_perm(self.right)
         return left.has_permission(request, view) and right.has_permission(request, view)
 
     def has_object_permission(self, request: Any, view: Any, obj: Any) -> bool:
-        left = self.left if isinstance(self.left, BasePermission) else self.left()
-        right = self.right if isinstance(self.right, BasePermission) else self.right()
+        left = _resolve_perm(self.left)
+        right = _resolve_perm(self.right)
         return left.has_object_permission(request, view, obj) and right.has_object_permission(request, view, obj)
 
 
@@ -46,13 +55,13 @@ class _OR(OperationHolderMixin):
         self.right = right
 
     def has_permission(self, request: Any, view: Any) -> bool:
-        left = self.left if isinstance(self.left, BasePermission) else self.left()
-        right = self.right if isinstance(self.right, BasePermission) else self.right()
+        left = _resolve_perm(self.left)
+        right = _resolve_perm(self.right)
         return left.has_permission(request, view) or right.has_permission(request, view)
 
     def has_object_permission(self, request: Any, view: Any, obj: Any) -> bool:
-        left = self.left if isinstance(self.left, BasePermission) else self.left()
-        right = self.right if isinstance(self.right, BasePermission) else self.right()
+        left = _resolve_perm(self.left)
+        right = _resolve_perm(self.right)
         return left.has_object_permission(request, view, obj) or right.has_object_permission(request, view, obj)
 
 
@@ -61,11 +70,11 @@ class _NOT(OperationHolderMixin):
         self.perm = perm
 
     def has_permission(self, request: Any, view: Any) -> bool:
-        p = self.perm if isinstance(self.perm, BasePermission) else self.perm()
+        p = _resolve_perm(self.perm)
         return not p.has_permission(request, view)
 
     def has_object_permission(self, request: Any, view: Any, obj: Any) -> bool:
-        p = self.perm if isinstance(self.perm, BasePermission) else self.perm()
+        p = _resolve_perm(self.perm)
         return not p.has_object_permission(request, view, obj)
 
 

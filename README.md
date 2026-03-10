@@ -41,7 +41,7 @@ That one line gives you:
 | `GET /api/` | API root listing all resources |
 | `GET /docs` | Swagger UI with typed schemas |
 
-> **Status:** Beta (0.1.3). Core API is stable across serializers, viewsets, routers, permissions, pagination, filtering, auth, throttling, content negotiation, and agent integration.
+> **Status:** Beta (0.1.4). Core API is stable across serializers, viewsets, routers, permissions, pagination, filtering, auth, throttling, content negotiation, and agent integration.
 
 ---
 
